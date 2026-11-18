@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <time.h>
 
 #define MAX_WORDS 8
 #define MAX_LENGTH 32
@@ -95,20 +96,13 @@ int wordLength(const char word[MAX_LENGTH])
 
 int checkSum(const char words[MAX_WORDS][MAX_LENGTH],
              int wordCount,
+             const int lengths[MAX_WORDS],
+             int maxLength,
              int digitForLetter[LETTER_COUNT])
 {
     int addendCount = wordCount - 1;
     int resultIndex = wordCount - 1;
-    int maxLength = wordLength(words[resultIndex]);
-
-    for (int w = 0; w < addendCount; w++)
-    {
-        int length = wordLength(words[w]);
-
-        if (length > maxLength)
-            maxLength = length;
-    }
-
+    int resultLength = lengths[resultIndex];
     int carry = 0;
 
     for (int column = 0; column < maxLength; column++)
@@ -117,7 +111,7 @@ int checkSum(const char words[MAX_WORDS][MAX_LENGTH],
 
         for (int w = 0; w < addendCount; w++)
         {
-            int length = wordLength(words[w]);
+            int length = lengths[w];
 
             if (column < length)
             {
@@ -125,8 +119,6 @@ int checkSum(const char words[MAX_WORDS][MAX_LENGTH],
                 columnSum += digitForLetter[ch - 'A'];
             }
         }
-
-        int resultLength = wordLength(words[resultIndex]);
 
         if (column < resultLength)
         {
@@ -149,6 +141,8 @@ int checkSum(const char words[MAX_WORDS][MAX_LENGTH],
 
 int solveRecursive(const char words[MAX_WORDS][MAX_LENGTH],
                    int wordCount,
+                   const int lengths[MAX_WORDS],
+                   int maxLength,
                    const char letters[DIGIT_COUNT],
                    int uniqueCount,
                    const int leading[LETTER_COUNT],
@@ -157,7 +151,7 @@ int solveRecursive(const char words[MAX_WORDS][MAX_LENGTH],
                    int position)
 {
     if (position == uniqueCount)
-        return checkSum(words, wordCount, digitForLetter);
+        return checkSum(words, wordCount, lengths, maxLength, digitForLetter);
 
     int letterIndex = letters[position] - 'A';
 
@@ -172,9 +166,9 @@ int solveRecursive(const char words[MAX_WORDS][MAX_LENGTH],
         digitForLetter[letterIndex] = digit;
         usedDigits[digit] = 1;
 
-        if (solveRecursive(words, wordCount, letters, uniqueCount,
-                           leading, digitForLetter, usedDigits,
-                           position + 1))
+        if (solveRecursive(words, wordCount, lengths, maxLength,
+                           letters, uniqueCount, leading, digitForLetter,
+                           usedDigits, position + 1))
             return 1;
 
         usedDigits[digit] = 0;
@@ -212,12 +206,43 @@ int main(void)
                         leading, &uniqueCount))
         return 1;
 
-    for (int i = 0; i < LETTER_COUNT; i++)
-        digitForLetter[i] = -1;
+    const int runs = 30;
+    clock_t start = clock();
 
-    if (!solveRecursive(words, wordCount, letters, uniqueCount,
-                        leading, digitForLetter, usedDigits, 0))
+    for (int run = 0; run < runs; run++)
+    {
+        for (int i = 0; i < LETTER_COUNT; i++)
+            digitForLetter[i] = -1;
+
+        for (int digit = 0; digit < DIGIT_COUNT; digit++)
+            usedDigits[digit] = 0;
+
+        int lengths[MAX_WORDS];
+        int maxLength = 0;
+
+        for (int w = 0; w < wordCount; w++)
+        {
+            lengths[w] = wordLength(words[w]);
+
+            if (lengths[w] > maxLength)
+                maxLength = lengths[w];
+        }
+
+        if (!solveRecursive(words, wordCount, lengths, maxLength,
+                            letters, uniqueCount, leading, digitForLetter,
+                            usedDigits, 0))
+            return 1;
+    }
+
+    clock_t end = clock();
+
+    if (start == (clock_t)-1 || end == (clock_t)-1)
+    {
+        fprintf(stderr, "Could not measure execution time.\n");
         return 1;
+    }
+
+    double totalMs = 1000.0 * (end - start) / CLOCKS_PER_SEC;
 
     for (int w = 0; w < wordCount - 1; w++)
     {
@@ -240,6 +265,9 @@ int main(void)
     printf(" = ");
     printNumber(words[wordCount - 1], digitForLetter);
     printf("\n");
+
+    printf("Total for %d runs: %.3f ms\n", runs, totalMs);
+    printf("Average per run: %.3f ms\n", totalMs / runs);
 
     return 0;
 }
