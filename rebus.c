@@ -94,55 +94,45 @@ int wordLength(const char word[MAX_LENGTH])
     return length;
 }
 
-int checkSum(const char words[MAX_WORDS][MAX_LENGTH],
-             int wordCount,
-             const int lengths[MAX_WORDS],
-             int maxLength,
-             int digitForLetter[LETTER_COUNT])
+void buildAddendOrder(const char words[MAX_WORDS][MAX_LENGTH],
+                      int addendCount,
+                      const int lengths[MAX_WORDS],
+                      int maxLength,
+                      const int leading[LETTER_COUNT],
+                      int addendOrder[MAX_LENGTH][MAX_WORDS])
 {
-    int addendCount = wordCount - 1;
-    int resultIndex = wordCount - 1;
-    int resultLength = lengths[resultIndex];
-    int carry = 0;
-
     for (int column = 0; column < maxLength; column++)
     {
-        int columnSum = carry;
+        int hasLeadingLetter[MAX_WORDS] = {0};
+        int slot = 0;
 
+        // Сначала слагаемые с ведущей буквой в этом разряде.
         for (int w = 0; w < addendCount; w++)
         {
-            int length = lengths[w];
-
-            if (column < length)
+            if (column < lengths[w])
             {
-                char ch = words[w][length - 1 - column];
-                columnSum += digitForLetter[ch - 'A'];
+                int letterIndex = words[w][lengths[w] - 1 - column] - 'A';
+                hasLeadingLetter[w] = leading[letterIndex];
             }
+
+            if (hasLeadingLetter[w])
+                addendOrder[column][slot++] = w;
         }
 
-        if (column < resultLength)
+        // Затем остальные слагаемые, включая короткие.
+        for (int w = 0; w < addendCount; w++)
         {
-            char ch = words[resultIndex][resultLength - 1 - column];
-            int resultDigit = digitForLetter[ch - 'A'];
-
-            if (columnSum % 10 != resultDigit)
-                return 0;
+            if (!hasLeadingLetter[w])
+                addendOrder[column][slot++] = w;
         }
-        else if (columnSum % 10 != 0)
-        {
-            return 0;
-        }
-
-        carry = columnSum / 10;
     }
-
-    return carry == 0;
 }
 
 int solveRecursive(const char words[MAX_WORDS][MAX_LENGTH],
                    int wordCount,
                    const int lengths[MAX_WORDS],
                    int maxLength,
+                   const int addendOrder[MAX_LENGTH][MAX_WORDS],
                    const int leading[LETTER_COUNT],
                    int digitForLetter[LETTER_COUNT],
                    int usedDigits[DIGIT_COUNT],
@@ -157,19 +147,23 @@ int solveRecursive(const char words[MAX_WORDS][MAX_LENGTH],
 
     if (w < resultIndex)
     {
-        // У короткого слагаемого этот разряд даёт ноль.
-        if (column >= lengths[w])
-            return solveRecursive(words, wordCount, lengths, maxLength,
-                                  leading, digitForLetter, usedDigits,
-                                  column, w + 1, columnSum);
+        // w — позиция в порядке обхода, wordIndex — индекс слова.
+        int wordIndex = addendOrder[column][w];
 
-        int letterIndex = words[w][lengths[w] - 1 - column] - 'A';
+        if (column >= lengths[wordIndex])
+            return solveRecursive(words, wordCount, lengths, maxLength,
+                                  addendOrder, leading, digitForLetter,
+                                  usedDigits, column, w + 1, columnSum);
+
+        int letterIndex =
+            words[wordIndex][lengths[wordIndex] - 1 - column] - 'A';
         int assignedDigit = digitForLetter[letterIndex];
 
         if (assignedDigit != -1)
             return solveRecursive(words, wordCount, lengths, maxLength,
-                                  leading, digitForLetter, usedDigits,
-                                  column, w + 1, columnSum + assignedDigit);
+                                  addendOrder, leading, digitForLetter,
+                                  usedDigits, column, w + 1,
+                                  columnSum + assignedDigit);
 
         for (int digit = 0; digit < DIGIT_COUNT; digit++)
         {
@@ -180,8 +174,8 @@ int solveRecursive(const char words[MAX_WORDS][MAX_LENGTH],
             usedDigits[digit] = 1;
 
             if (solveRecursive(words, wordCount, lengths, maxLength,
-                               leading, digitForLetter, usedDigits,
-                               column, w + 1, columnSum + digit))
+                               addendOrder, leading, digitForLetter,
+                               usedDigits, column, w + 1, columnSum + digit))
                 return 1;
 
             usedDigits[digit] = 0;
@@ -191,7 +185,7 @@ int solveRecursive(const char words[MAX_WORDS][MAX_LENGTH],
         return 0;
     }
 
-    // Все слагаемые в текущем разряде обработаны.
+    // Все слагаемые текущего разряда обработаны.
     int resultDigit = columnSum % 10;
     int carry = columnSum / 10;
 
@@ -201,13 +195,13 @@ int solveRecursive(const char words[MAX_WORDS][MAX_LENGTH],
             return 0;
 
         return solveRecursive(words, wordCount, lengths, maxLength,
-                              leading, digitForLetter, usedDigits,
-                              column + 1, 0, carry);
+                              addendOrder, leading, digitForLetter,
+                              usedDigits, column + 1, 0, carry);
     }
 
-    int resultIndexOfLetter =
+    int resultLetterIndex =
         words[resultIndex][lengths[resultIndex] - 1 - column] - 'A';
-    int assignedDigit = digitForLetter[resultIndexOfLetter];
+    int assignedDigit = digitForLetter[resultLetterIndex];
 
     if (assignedDigit != -1)
     {
@@ -215,24 +209,24 @@ int solveRecursive(const char words[MAX_WORDS][MAX_LENGTH],
             return 0;
 
         return solveRecursive(words, wordCount, lengths, maxLength,
-                              leading, digitForLetter, usedDigits,
-                              column + 1, 0, carry);
+                              addendOrder, leading, digitForLetter,
+                              usedDigits, column + 1, 0, carry);
     }
 
     if (usedDigits[resultDigit] ||
-        (resultDigit == 0 && leading[resultIndexOfLetter]))
+        (resultDigit == 0 && leading[resultLetterIndex]))
         return 0;
 
-    digitForLetter[resultIndexOfLetter] = resultDigit;
+    digitForLetter[resultLetterIndex] = resultDigit;
     usedDigits[resultDigit] = 1;
 
     if (solveRecursive(words, wordCount, lengths, maxLength,
-                       leading, digitForLetter, usedDigits,
-                       column + 1, 0, carry))
+                       addendOrder, leading, digitForLetter,
+                       usedDigits, column + 1, 0, carry))
         return 1;
 
     usedDigits[resultDigit] = 0;
-    digitForLetter[resultIndexOfLetter] = -1;
+    digitForLetter[resultLetterIndex] = -1;
 
     return 0;
 }
@@ -287,9 +281,14 @@ int main(void)
                 maxLength = lengths[w];
         }
 
+        int addendOrder[MAX_LENGTH][MAX_WORDS];
+
+        buildAddendOrder(words, wordCount - 1, lengths, maxLength,
+                         leading, addendOrder);
+
         if (!solveRecursive(words, wordCount, lengths, maxLength,
-                    leading, digitForLetter, usedDigits,
-                    0, 0, 0))
+                            addendOrder, leading, digitForLetter,
+                            usedDigits, 0, 0, 0))
             return 1;
     }
 
